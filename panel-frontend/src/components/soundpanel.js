@@ -15,7 +15,7 @@ class SoundPanel extends Component {
         this.state = { playing: false, time: 0, interval: null, paused: false }
 
         this.playStopSound = this.playStopSound.bind(this)
-        window.eventEmitter.addListener("endSound", this.onEndSound.bind(this))
+        window.eventEmitter.addListener("endPlay", this.onEndPlay.bind(this))
 
         this.addTime = this.addTime.bind(this)
         this.resetTime = this.resetTime.bind(this)
@@ -42,22 +42,24 @@ class SoundPanel extends Component {
         clearInterval(this.interval)
     }
 
-    onEndSound(file) {
+    onEndPlay(file) {
         if (file === this.props.file) {
             this.setState({ playing: false })
             this.resetTime()
         }
     } 
 
-    playStopSound() {
+    async playStopSound() {
         if (this.state.playing) {
             window.panelController.cancel(this.props.file)
             this.setState({ playing: false })
             this.resetTime()
         } else {
-            window.panelController.play(this.props.file)
-            this.setState({ playing: true })
-            this.startTime()
+            if (await window.panelController.canPlay()) {
+                window.panelController.play(this.props.file)
+                this.setState({ playing: true })
+                this.startTime()
+            }
         }   
     }
 

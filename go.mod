@@ -13,8 +13,9 @@ require (
 	github.com/markbates/pkger v0.12.10
 	github.com/rogpeppe/go-internal v1.5.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/zserge/lorca v0.1.6
+	github.com/zserge/lorca v0.1.8
 	golang.org/x/crypto v0.0.0-20191206172530-e9b2fee46413 // indirect
+	golang.org/x/net v0.0.0-20191209160850-c0dbc17a3553 // indirect
 	golang.org/x/sys v0.0.0-20191210023423-ac6580df4449 // indirect
 	golang.org/x/tools v0.0.0-20191213221258-04c2e8eff935 // indirect
 )

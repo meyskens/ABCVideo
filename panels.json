@@ -1,17 +1,17 @@
 [{
-    "name": "test 1",
+    "name": "Write in Go",
     "shortcut": "Q",
-    "file": "./test.mp3"
+    "file": "./testvids/writeingo.mp4"
 }, {
     "name": "test 2",
     "shortcut": "W",
-    "file": "./test.mp3"
+    "file": "./testvids/bbb.mp4"
 }, {
     "name": "test 3",
     "shortcut": "E",
-    "file": "./test.mp3"
+    "file": "./testvids/intel.mp4"
 }, {
     "name": "test 4",
     "shortcut": "R",
-    "file": "./test.mp3"
+    "file": "./testvids/writeingo.mp4"
 }]

@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"regexp"
 	"sync"
 
 	"github.com/gobuffalo/packr/v2"
@@ -15,13 +16,28 @@ import (
 )
 
 var panel lorca.UI
+var player lorca.UI
 var controller = PanelController{Panels: []Panel{}, playCancelers: map[string]context.CancelFunc{}, playPausers: map[string]*sync.Mutex{}}
+var playerController = PlayerController{}
+
+var playingVideo = false
 
 // Panel is one panel to be shown
 type Panel struct {
 	Name     string `json:"name"`
 	Shortcut string `json:"shortcut"`
 	File     string `json:"file"`
+}
+
+// PlayerController helps with controling the player
+type PlayerController struct{}
+
+// SignalEndPlay gets sent when a video ended
+func (p *PlayerController) SignalEndPlay(file string) {
+	re := regexp.MustCompile(`^/videos/`)
+	file = re.ReplaceAllString(file, `$1`)
+	panel.Eval("window.eventEmitter.emit('endPlay','" + file + "')")
+	playingVideo = false
 }
 
 // PanelController helps with controling the pannels
@@ -52,37 +68,31 @@ func (p *PanelController) GetFromDisk() []Panel {
 // Play starts playing a specific file
 func (p *PanelController) Play(file string) {
 	fmt.Println(file)
-	ctx, cancel := context.WithCancel(context.Background())
-	p.playCancelers[file] = cancel
-	pause := sync.Mutex{}
-	p.playPausers[file] = &pause
-	go func() {
-		playMP3(ctx, &pause, file)
-		cancel()
-		p.playCancelers[file] = nil
-		panel.Eval("window.eventEmitter.emit('endSound','" + file + "')")
-	}()
+
+	player.Eval(fmt.Sprintf("loadVideo('/videos/%s')", file))
+	player.Eval("startVideo()")
+	playingVideo = true
 }
 
 // Cancel stops playing a specific file
 func (p *PanelController) Cancel(file string) {
-	if cancel := p.playCancelers[file]; cancel != nil {
-		cancel()
-	}
+	player.Eval("clearVideo()")
+	playingVideo = false
 }
 
 // Pause pauses playing a specific file
 func (p *PanelController) Pause(file string) {
-	if mutex := p.playPausers[file]; mutex != nil {
-		mutex.Lock()
-	}
+	player.Eval("pauseVideo()")
 }
 
 // Resume pauses playing a specific file
 func (p *PanelController) Resume(file string) {
-	if mutex := p.playPausers[file]; mutex != nil {
-		mutex.Unlock()
-	}
+	player.Eval("startVideo()")
+}
+
+// CanPlay tells if a new file can be started
+func (p *PanelController) CanPlay() bool {
+	return !playingVideo
 }
 
 func handleAPIPanels(w http.ResponseWriter, r *http.Request) {
@@ -104,6 +114,7 @@ func main() {
 	// load in bindata
 	http.Handle("/panel/", http.StripPrefix("/panel/", http.FileServer(panelBox)))
 	http.Handle("/player/", http.StripPrefix("/player/", http.FileServer(playerBox)))
+	http.Handle("/videos/", http.StripPrefix("/videos/", http.FileServer(http.Dir("./videos"))))
 
 	go func() {
 		fmt.Println("listening on", ln.Addr().String())
@@ -113,7 +124,7 @@ func main() {
 	panel = getPanel(ln.Addr())
 	defer panel.Close()
 
-	player := getPlayer(ln.Addr())
+	player = getPlayer(ln.Addr())
 	defer player.Close()
 
 	// Quit after all windows are closed
@@ -136,12 +147,14 @@ func getPanel(serverAddr net.Addr) lorca.UI {
 	ui.Bind("pause", controller.Pause)
 	ui.Bind("cancel", controller.Cancel)
 	ui.Bind("resume", controller.Resume)
+	ui.Bind("canPlay", controller.CanPlay)
 	ui.Eval(`
 			window.panelController = {
 				play,
 				pause,
 				cancel,
 				resume,
+				canPlay,
 			}
 		`)
 	log.Println(err)
@@ -159,6 +172,7 @@ func getPlayer(serverAddr net.Addr) lorca.UI {
 	ui.Load(fmt.Sprintf("http://%s/player/", serverAddr))
 
 	log.Println("DOM bind")
+	ui.Bind("signalEndPlay", playerController.SignalEndPlay)
 
 	return ui
 }
