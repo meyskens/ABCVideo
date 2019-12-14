@@ -1,5 +1,8 @@
-/bindata.go
+/main-packr.go
+packrd/
 node_modules/
-/frontend/build
+/panel-frontend/build
 /abcboard
 /test.mp3
+/videos/testvids
+/ABCVideo
