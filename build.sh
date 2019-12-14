@@ -4,10 +4,12 @@ then
     GOPATH=$HOME/go
 fi
 PATH=$GOPATH/bin/:$PATH
-go get github.com/jteeuwen/go-bindata/...
+go get -u github.com/gobuffalo/packr/v2/...
+go get -u github.com/gobuffalo/packr/v2/packr2
 
-cd frontend 
+cd panel-frontend 
 npm run-script build
 cd ..
-go-bindata ./frontend/build/...
+
+packr2
 go build ./

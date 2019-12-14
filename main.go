@@ -10,12 +10,11 @@ import (
 	"os"
 	"sync"
 
+	"github.com/gobuffalo/packr/v2"
 	"github.com/zserge/lorca"
-
-	assetfs "github.com/elazarl/go-bindata-assetfs"
 )
 
-var ui lorca.UI
+var panel lorca.UI
 var controller = PanelController{Panels: []Panel{}, playCancelers: map[string]context.CancelFunc{}, playPausers: map[string]*sync.Mutex{}}
 
 // Panel is one panel to be shown
@@ -61,7 +60,7 @@ func (p *PanelController) Play(file string) {
 		playMP3(ctx, &pause, file)
 		cancel()
 		p.playCancelers[file] = nil
-		ui.Eval("window.eventEmitter.emit('endSound','" + file + "')")
+		panel.Eval("window.eventEmitter.emit('endSound','" + file + "')")
 	}()
 }
 
@@ -93,25 +92,43 @@ func handleAPIPanels(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	var err error
-	ui, err = lorca.New("", "", 480, 320)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer ui.Close()
-
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer ln.Close()
+
+	playerBox := packr.New("Player", "./player-frontend")
+	panelBox := packr.New("Panel", "./panel-frontend/build")
+
+	http.Handle("/api/panels", http.HandlerFunc(handleAPIPanels))
+	// load in bindata
+	http.Handle("/panel/", http.StripPrefix("/panel/", http.FileServer(panelBox)))
+	http.Handle("/player/", http.StripPrefix("/player/", http.FileServer(playerBox)))
+
 	go func() {
-		// load in bindata
-		http.Handle("/api/panels", http.HandlerFunc(handleAPIPanels))
-		http.Handle("/", http.FileServer(&assetfs.AssetFS{Asset: Asset, AssetDir: AssetDir, AssetInfo: AssetInfo, Prefix: "/frontend/build"}))
+		fmt.Println("listening on", ln.Addr().String())
 		log.Fatal(http.Serve(ln, nil))
 	}()
-	ui.Load(fmt.Sprintf("http://%s", ln.Addr()))
+
+	panel = getPanel(ln.Addr())
+	defer panel.Close()
+
+	player := getPlayer(ln.Addr())
+	defer player.Close()
+
+	// Quit after all windows are closed
+	<-panel.Done()
+	<-player.Done()
+}
+
+func getPanel(serverAddr net.Addr) lorca.UI {
+	var err error
+	ui, err := lorca.New("", "", 480, 320)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ui.Load(fmt.Sprintf("http://%s/panel/", serverAddr))
 
 	log.Println("DOM bind")
 
@@ -129,6 +146,19 @@ func main() {
 		`)
 	log.Println(err)
 
-	// Wait for the browser window to be closed
-	<-ui.Done()
+	return ui
+}
+
+func getPlayer(serverAddr net.Addr) lorca.UI {
+	var err error
+	ui, err := lorca.New("", "", 480, 320)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ui.Load(fmt.Sprintf("http://%s/player/", serverAddr))
+
+	log.Println("DOM bind")
+
+	return ui
 }
