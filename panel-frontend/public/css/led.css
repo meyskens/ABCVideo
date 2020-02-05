@@ -1,6 +1,6 @@
 @font-face {
     font-family: 'LCD14';
-        src: url('/fonts/LCD14.otf') format('opentype');
+        src: url('../fonts/LCD14.otf') format('opentype');
     font-weight: normal;
     font-style: normal;
 }
