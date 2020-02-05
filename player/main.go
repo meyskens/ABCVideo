@@ -103,7 +103,7 @@ func main() {
 
 func getPlayer(serverAddr net.Addr) lorca.UI {
 	var err error
-	ui, err := lorca.New("", "", 480, 320)
+	ui, err := lorca.New("", "", 480, 320, "--kiosk")
 	if err != nil {
 		log.Fatal(err)
 	}
