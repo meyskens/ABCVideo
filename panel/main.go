@@ -7,8 +7,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/rpc"
 	"os"
-	"regexp"
 	"sync"
 
 	"github.com/gobuffalo/packr/v2"
@@ -16,11 +16,27 @@ import (
 )
 
 var panel lorca.UI
-var player lorca.UI
 var controller = PanelController{Panels: []Panel{}, playCancelers: map[string]context.CancelFunc{}, playPausers: map[string]*sync.Mutex{}}
-var playerController = PlayerController{}
-
 var playingVideo = false
+
+var rpcClient *rpc.Client
+
+// RPC structs
+type EmptyRequest struct {
+	Emptyness string // needed for RPC to be happy
+}
+
+type EmptyResponse struct {
+	Emptyness string // needed for RPC to be happy
+}
+
+type FileRequest struct {
+	File string
+}
+
+type FileResponse struct {
+	File string
+}
 
 // Panel is one panel to be shown
 type Panel struct {
@@ -31,14 +47,6 @@ type Panel struct {
 
 // PlayerController helps with controling the player
 type PlayerController struct{}
-
-// SignalEndPlay gets sent when a video ended
-func (p *PlayerController) SignalEndPlay(file string) {
-	re := regexp.MustCompile(`^/videos/`)
-	file = re.ReplaceAllString(file, `$1`)
-	panel.Eval("window.eventEmitter.emit('endPlay','" + file + "')")
-	playingVideo = false
-}
 
 // PanelController helps with controling the pannels
 type PanelController struct {
@@ -68,26 +76,24 @@ func (p *PanelController) GetFromDisk() []Panel {
 // Play starts playing a specific file
 func (p *PanelController) Play(file string) {
 	fmt.Println(file)
-
-	player.Eval(fmt.Sprintf("loadVideo('/videos/%s')", file))
-	player.Eval("startVideo()")
+	rpcClient.Call("PlayerController.Play", FileRequest{File: file}, &EmptyResponse{})
 	playingVideo = true
 }
 
 // Cancel stops playing a specific file
 func (p *PanelController) Cancel(file string) {
-	player.Eval("clearVideo()")
+	rpcClient.Call("PlayerController.Cancel", FileRequest{File: file}, &EmptyResponse{})
 	playingVideo = false
 }
 
 // Pause pauses playing a specific file
 func (p *PanelController) Pause(file string) {
-	player.Eval("pauseVideo()")
+	rpcClient.Call("PlayerController.Oause", FileRequest{File: file}, &EmptyResponse{})
 }
 
 // Resume pauses playing a specific file
 func (p *PanelController) Resume(file string) {
-	player.Eval("startVideo()")
+	rpcClient.Call("PlayerController.Resume", FileRequest{File: file}, &EmptyResponse{})
 }
 
 // CanPlay tells if a new file can be started
@@ -102,19 +108,26 @@ func handleAPIPanels(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	if len(os.Args) <= 1 {
+		log.Fatal("Need to specify IP of the player")
+	}
+
+	var err error
+	rpcClient, err = rpc.Dial("tcp", os.Args[1]+":1234")
+	if err != nil {
+		log.Fatal("dialing:", err)
+	}
+
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	playerBox := packr.New("Player", "./player-frontend")
-	panelBox := packr.New("Panel", "./panel-frontend/build")
+	panelBox := packr.New("Panel", "../panel-frontend/build")
 
 	http.Handle("/api/panels", http.HandlerFunc(handleAPIPanels))
 	// load in bindata
 	http.Handle("/panel/", http.StripPrefix("/panel/", http.FileServer(panelBox)))
-	http.Handle("/player/", http.StripPrefix("/player/", http.FileServer(playerBox)))
-	http.Handle("/videos/", http.StripPrefix("/videos/", http.FileServer(http.Dir("./videos"))))
 
 	go func() {
 		fmt.Println("listening on", ln.Addr().String())
@@ -124,12 +137,7 @@ func main() {
 	panel = getPanel(ln.Addr())
 	defer panel.Close()
 
-	player = getPlayer(ln.Addr())
-	defer player.Close()
-
-	// Quit after all windows are closed
 	<-panel.Done()
-	<-player.Done()
 }
 
 func getPanel(serverAddr net.Addr) lorca.UI {
@@ -159,20 +167,19 @@ func getPanel(serverAddr net.Addr) lorca.UI {
 		`)
 	log.Println(err)
 
+	go listenForEnd()
+
 	return ui
 }
 
-func getPlayer(serverAddr net.Addr) lorca.UI {
-	var err error
-	ui, err := lorca.New("", "", 480, 320)
-	if err != nil {
-		log.Fatal(err)
+func listenForEnd() {
+	for {
+		var res FileResponse
+		err := rpcClient.Call("PlayerController.WaitForEnd", EmptyRequest{}, &res)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		panel.Eval("window.eventEmitter.emit('endPlay','" + res.File + "')")
 	}
-
-	ui.Load(fmt.Sprintf("http://%s/player/", serverAddr))
-
-	log.Println("DOM bind")
-	ui.Bind("signalEndPlay", playerController.SignalEndPlay)
-
-	return ui
 }

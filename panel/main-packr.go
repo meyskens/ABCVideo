@@ -5,4 +5,4 @@
 // and any other packr generated files.
 package main
 
-import _ "github.com/meyskens/ABCVideo/packrd"
+import _ "github.com/meyskens/ABCVideo/panel/packrd"

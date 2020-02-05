@@ -1,5 +1,5 @@
 #!/bin/bash
-if [ $GOPATH == ""] 
+if [ $GOPATH == "" ]
 then
     GOPATH=$HOME/go
 fi
@@ -11,5 +11,13 @@ cd panel-frontend
 npm run-script build
 cd ..
 
+cd player
 packr2
-go build ./
+cd ..
+
+cd panel
+packr2
+cd ..
+
+go build -o ABCVideo-player ./player
+go build -o ABCVideo-panel ./panel
